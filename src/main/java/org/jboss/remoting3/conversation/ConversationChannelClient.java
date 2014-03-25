@@ -34,13 +34,12 @@ import org.xnio.OptionMap;
 public interface ConversationChannelClient extends HandleableCloseable<ConversationChannelClient> {
 
     /**
-     * Open a new conversation. The message receiver may be used to handle messages initiated by the remote side.
+     * Open a new conversation.
      *
-     * @param messageReceiver the conversation message receiver
-     * @param options         the conversation options
+     * @param options the conversation options
      * @return the conversation future
      * @throws IOException
      */
-    IoFuture<Conversation> openConversation(final ConversationMessageReceiver messageReceiver, OptionMap options) throws IOException;
+    IoFuture<Conversation> openConversation(OptionMap options) throws IOException;
 
 }

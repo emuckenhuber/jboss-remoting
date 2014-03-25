@@ -26,8 +26,8 @@ import static org.jboss.remoting3.conversation.Protocol.CONVERSATION_CLOSED;
 import static org.jboss.remoting3.conversation.Protocol.CONVERSATION_MESSAGE;
 import static org.jboss.remoting3.conversation.Protocol.MESSAGE_BODY;
 import static org.jboss.remoting3.conversation.Protocol.MESSAGE_FAILED;
-import static org.jboss.remoting3.conversation.Protocol.REQUEST_ID;
 import static org.jboss.remoting3.conversation.Protocol.NEW_REQUEST_MESSAGE;
+import static org.jboss.remoting3.conversation.Protocol.REQUEST_ID;
 import static org.jboss.remoting3.conversation.Protocol.RESPONSE_MESSAGE;
 import static org.jboss.remoting3.conversation.ProtocolUtils.expectHeader;
 import static org.jboss.remoting3.conversation.ProtocolUtils.readInt;
@@ -47,7 +47,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import com.sun.xml.internal.ws.util.StreamUtils;
 import org.jboss.remoting3.Attachments;
 import org.jboss.remoting3.Channel;
 import org.jboss.remoting3.CloseHandler;
@@ -60,7 +59,7 @@ import org.xnio.Option;
 /**
  * @author Emanuel Muckenhuber
  */
-class ConversationImpl extends ConversationResourceTracker<Conversation> implements Conversation {
+class NewConversationImpl extends ConversationProtocolHandler<Conversation> implements Conversation {
 
     private static final ConversationLogger log = ConversationLogger.ROOT_LOGGER;
 
@@ -78,11 +77,16 @@ class ConversationImpl extends ConversationResourceTracker<Conversation> impleme
         }
     };
 
-    public ConversationImpl(final int conversationID, final ConversationMessageReceiver messageReceiver, final Channel channel, final Executor executor) {
+    public NewConversationImpl(final int conversationID, final ConversationMessageReceiver messageReceiver, final Channel channel, final Executor executor) {
         super(executor);
         this.channel = channel;
         this.messageReceiver = messageReceiver;
         this.conversationID = conversationID;
+    }
+
+    @Override
+    ConversationProtocolHandler getProtocolHandler(int conversationID) {
+        return this;
     }
 
     CloseHandler<Channel> getCloseHandler() {
@@ -107,6 +111,15 @@ class ConversationImpl extends ConversationResourceTracker<Conversation> impleme
     @Override
     public <T> T setOption(Option<T> option, T value) throws IllegalArgumentException, IOException {
         return channel.setOption(option, value);
+    }
+
+    @Override
+    void conversationClosed(MessageInputStream message) throws IOException {
+        try {
+            IoUtils.safeClose(message);
+        } finally {
+            handleRemoteClose();
+        }
     }
 
     @Override
@@ -156,9 +169,8 @@ class ConversationImpl extends ConversationResourceTracker<Conversation> impleme
      * @param message        the message input stream
      * @throws IOException
      */
-    protected void handleMessage(final int conversationID, final Channel channel, final MessageInputStream message) throws IOException {
-        assert this.conversationID == conversationID;
-        assert this.channel == channel;
+    @Override
+    protected void handleMessage(final MessageInputStream message) throws IOException {
         final int type = message.read();
         if (type == NEW_REQUEST_MESSAGE) {
             final int requestType = message.read();
@@ -166,7 +178,7 @@ class ConversationImpl extends ConversationResourceTracker<Conversation> impleme
             if (requestType == REQUEST_ID) { // Expects a response
                 final int responseID = readInt(message);
                 expectHeader(message, MESSAGE_BODY);
-                conversation = null; // new ConversationResponseImpl(this, responseID);
+                conversation = new ConversationResponseImpl(this, responseID);
             } else if (requestType == MESSAGE_BODY) { // One way message
                 conversation = this;
             } else {
@@ -207,7 +219,7 @@ class ConversationImpl extends ConversationResourceTracker<Conversation> impleme
                 if (responseType == REQUEST_ID) { // Expects a response
                     final int responseID = readInt(message);
                     expectHeader(message, MESSAGE_BODY);
-                    conversation = null; /// new ConversationResponseImpl(this, responseID);
+                    conversation = new ConversationResponseImpl(this, responseID);
                 } else if (responseType == MESSAGE_BODY) { // One way
                     conversation = this;
                 } else {

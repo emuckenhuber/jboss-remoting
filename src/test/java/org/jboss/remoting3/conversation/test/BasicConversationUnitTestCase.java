@@ -101,7 +101,7 @@ public class BasicConversationUnitTestCase extends AbstractConversationTestBase 
         // Create the client and send a simple request
         final ConversationChannelClient client = Conversations.createClient(sendChannel, executor);
         try {
-            final Conversation conversation = client.openConversation(ConversationMessageReceiver.REJECT_REQUESTS, OptionMap.EMPTY).get();
+            final Conversation conversation = client.openConversation(OptionMap.EMPTY).get();
             try {
                 final CountDownLatch latch = new CountDownLatch(1);
                 // Create the response handler
@@ -145,7 +145,7 @@ public class BasicConversationUnitTestCase extends AbstractConversationTestBase 
         // Create the client and send a simple request
         final ConversationChannelClient client = Conversations.createClient(sendChannel, executor);
         try {
-            final Conversation conversation = client.openConversation(ConversationMessageReceiver.REJECT_REQUESTS, OptionMap.EMPTY).get();
+            final Conversation conversation = client.openConversation(OptionMap.EMPTY).get();
             try {
                 final CountDownLatch latch = new CountDownLatch(1);
                 // Create the response handler
@@ -190,7 +190,7 @@ public class BasicConversationUnitTestCase extends AbstractConversationTestBase 
         // Create the client and send a simple request
         final ConversationChannelClient client = Conversations.createClient(sendChannel, executor);
         try {
-            final Conversation conversation = client.openConversation(ConversationMessageReceiver.REJECT_REQUESTS, OptionMap.EMPTY).get();
+            final Conversation conversation = client.openConversation(OptionMap.EMPTY).get();
             try {
                 final ResultMessageHandler handler = new ResultMessageHandler(false);
                 final IoFuture<Boolean> future = handler.getFuture();
@@ -222,7 +222,7 @@ public class BasicConversationUnitTestCase extends AbstractConversationTestBase 
         // Create the client and send a simple request
         final ConversationChannelClient client = Conversations.createClient(sendChannel, executor);
         try {
-            final Conversation conversation = client.openConversation(ConversationMessageReceiver.REJECT_REQUESTS, OptionMap.EMPTY).get();
+            final Conversation conversation = client.openConversation(OptionMap.EMPTY).get();
             try {
                 // Send the failure byte
                 final ResultMessageHandler handler = new ResultMessageHandler(true);

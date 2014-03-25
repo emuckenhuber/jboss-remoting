@@ -45,9 +45,9 @@ class ConversationResponseImpl implements Conversation {
 
     // The remote pending-request id
     private final int responseID;
-    private final ConversationImpl conversation;
+    private final NewConversationImpl conversation;
 
-    ConversationResponseImpl(ConversationImpl conversation, final int responseID) {
+    ConversationResponseImpl(NewConversationImpl conversation, final int responseID) {
         this.responseID = responseID;
         this.conversation = conversation;
     }

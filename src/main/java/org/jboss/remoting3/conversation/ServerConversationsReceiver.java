@@ -50,12 +50,12 @@ import org.xnio.IoUtils;
 /**
  * @author Emanuel Muckenhuber
  */
-class ServerConversationsReceiver extends ConversationResourceTracker<ServerConversationsReceiver> implements Channel.Receiver {
+class ServerConversationsReceiver extends ConversationProtocolHandler<ServerConversationsReceiver> implements Channel.Receiver {
 
     private final Executor executor;
     private final ConversationMessageReceiver messageListener;
     private final AtomicInteger conversationIDs = new AtomicInteger();
-    private final ConcurrentMap<Integer, ConversationImpl> conversations = new ConcurrentHashMap<Integer, ConversationImpl>();
+    private final ConcurrentMap<Integer, NewConversationImpl> conversations = new ConcurrentHashMap<Integer, NewConversationImpl>();
 
     ServerConversationsReceiver(ConversationMessageReceiver messageListener, Executor executor) {
         super(executor);
@@ -74,47 +74,24 @@ class ServerConversationsReceiver extends ConversationResourceTracker<ServerConv
     }
 
     @Override
+    ConversationProtocolHandler getProtocolHandler(int conversationID) {
+        return conversations.get(conversationID);
+    }
+
+    @Override
     public void handleMessage(final Channel channel, final MessageInputStream message) {
         try {
             final int conversationID = readInt(message);
             final int messageType = message.read();
-            switch (messageType) {
-                case OPEN_CONVERSATION:
-                    openConversation(conversationID, channel, message);
-                    break;
-                case CONVERSATION_MESSAGE: {
-                    final ConversationImpl conversation = conversations.get(conversationID);
-                    if (conversation != null) {
-                        conversation.handleMessage(conversationID, channel, message);
-                    } else {
-                        sendProtocolError(conversationID, channel, "no such conversation");
-                    }
-                    break;
-                } case CONVERSATION_CLOSED: {
-                    final ConversationImpl conversation = conversations.get(conversationID);
-                    if (conversation != null) {
-                        conversation.handleRemoteClose();
-                    } else {
-                        sendProtocolError(conversationID, channel, "no such conversation");
-                    }
-                    break;
-                } case PROTOCOL_ERROR: {
-                    final ConversationImpl conversation = conversations.get(conversationID);
-                    if (conversation != null) {
-                        conversation.handleError(new IOException("protocol error"));
-                    }
-                    break;
-                } default: {
-                    throw new IOException();
-                }
-            }
+            handle(conversationID, messageType, channel, message);
+            System.out.println("received " + conversationID);
+            channel.receiveMessage(this);
         } catch (IOException e) {
-            e.printStackTrace();
             handleError(channel, e);
         }
-        channel.receiveMessage(this);
     }
 
+    @Override
     protected void openConversation(final int clientConversationID, final Channel channel, final MessageInputStream message) {
         try {
             if (incrementResourceCountUnchecked()) {
@@ -128,32 +105,34 @@ class ServerConversationsReceiver extends ConversationResourceTracker<ServerConv
                     message.close();
 
                     // We are going to use the client conversation id to send messages to the client
-                    final ConversationImpl conversation = new ConversationImpl(clientConversationID, messageListener, channel, executor);
+                    final NewConversationImpl conversation = new NewConversationImpl(clientConversationID, messageListener, channel, executor);
                     for (;;) {
                         // The client is going to use our conversation ID when sending messages
                         final int conversationID = conversationIDs.incrementAndGet();
-                        if (conversations.putIfAbsent(conversationID, conversation) == null) {
-                            // Register the close handlers
-                            conversationOpened(conversationID, conversation, channel);
-                            // Send the conversation open acknowledgement
-                            boolean ok = false;
-                            final MessageOutputStream os = channel.writeMessage();
-                            try {
-                                writeInt(os, clientConversationID);
-                                os.write(CONVERSATION_OPENED);
-                                writeInt(os, conversationID);
-                                os.write(CAP_VERSION);
-                                os.write(version);
-                                // TODO capabilities
-                                os.close();
-                                ok = true;
-                            } finally {
-                                if (!ok) {
-                                    conversation.closeAsync();
+                        if (!conversations.containsKey(conversationID)) {
+                            if (conversations.putIfAbsent(conversationID, conversation) == null) {
+                                // Register the close handlers
+                                conversationOpened(conversationID, conversation, channel);
+                                // Send the conversation open acknowledgement
+                                boolean ok = false;
+                                final MessageOutputStream os = channel.writeMessage();
+                                try {
+                                    writeInt(os, clientConversationID);
+                                    os.write(CONVERSATION_OPENED);
+                                    writeInt(os, conversationID);
+                                    os.write(CAP_VERSION);
+                                    os.write(version);
+                                    // TODO capabilities
+                                    os.close();
+                                    ok = true;
+                                } finally {
+                                    if (!ok) {
+                                        conversation.closeAsync();
+                                    }
+                                    IoUtils.safeClose(os);
                                 }
-                                IoUtils.safeClose(os);
+                                return;
                             }
-                            return;
                         }
                     }
                 } catch (IOException e) {
@@ -178,7 +157,7 @@ class ServerConversationsReceiver extends ConversationResourceTracker<ServerConv
         }
     }
 
-    protected void conversationOpened(final int conversationID, final ConversationImpl conversation, final Channel channel) throws IOException {
+    protected void conversationOpened(final int conversationID, final NewConversationImpl conversation, final Channel channel) throws IOException {
         // Add the close handler
         channel.addCloseHandler(conversation.getCloseHandler());
         conversation.addCloseHandler(new CloseHandler<Conversation>() {

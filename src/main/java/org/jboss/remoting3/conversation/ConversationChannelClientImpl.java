@@ -54,7 +54,7 @@ class ConversationChannelClientImpl extends ConversationResourceTracker<Conversa
     private final Executor executor;
     private final AtomicInteger pendingConnectionIDs = new AtomicInteger();
     private final ConcurrentMap<Integer, ConversationImpl> conversations = new ConcurrentHashMap<Integer, ConversationImpl>(16, 0.75f, Runtime.getRuntime().availableProcessors());
-    private final ConcurrentMap<Integer, PendingConversation> pendingConversations = new ConcurrentHashMap<Integer, PendingConversation>(16, 0.75f, Runtime.getRuntime().availableProcessors());
+    private final ConcurrentMap<Integer, PendingConversation> pendingConversations = new ConcurrentHashMap<Integer, PendingConversation>(8, 0.75f, Runtime.getRuntime().availableProcessors());
 
     ConversationChannelClientImpl(Channel channel, Executor executor) {
         super(executor);
@@ -89,7 +89,7 @@ class ConversationChannelClientImpl extends ConversationResourceTracker<Conversa
                 } case Protocol.CONVERSATION_REJECTED: {
                     final PendingConversation conversation = pendingConversations.get(conversationID);
                     if (conversation != null) {
-                        conversation.result.setException(new IOException("rejected"));
+                        conversation.result.setException(new IOException("conversation rejected"));
                     }
                     break;
                 } case Protocol.CONVERSATION_MESSAGE: {
@@ -116,7 +116,7 @@ class ConversationChannelClientImpl extends ConversationResourceTracker<Conversa
         }
     }
 
-    public IoFuture<Conversation> openConversation(final ConversationMessageReceiver messageReceiver, OptionMap options) throws IOException {
+    public IoFuture<Conversation> openConversation(OptionMap options) throws IOException {
         incrementResourceCount();
 
         final FutureResult<Conversation> result = new FutureResult<Conversation>();
@@ -128,7 +128,7 @@ class ConversationChannelClientImpl extends ConversationResourceTracker<Conversa
             }
         }, null);
 
-        final PendingConversation pending = new PendingConversation(messageReceiver, result);
+        final PendingConversation pending = new PendingConversation(result);
         int pendingConnectionID;
         for (;;) {
             pendingConnectionID = pendingConnectionIDs.incrementAndGet();
@@ -167,14 +167,8 @@ class ConversationChannelClientImpl extends ConversationResourceTracker<Conversa
 
                 message.close();
 
-                final ConversationImpl conversation = new ConversationImpl(conversationID, pending.receiver, channel, executor);
+                final ConversationImpl conversation = null; // new ConversationImpl(conversationID, ConversationMessageReceiver.REJECT_REQUESTS, channel, executor);
                 channel.addCloseHandler(conversation.getCloseHandler());
-                conversation.addCloseHandler(new CloseHandler<Conversation>() {
-                    @Override
-                    public void handleClose(Conversation closed, IOException exception) {
-                        conversationClosed(conversationID, conversation);
-                    }
-                });
                 ok = true; // Everything else will be covered by the close handler
                 if (conversations.putIfAbsent(conversationID, conversation) != null) {
                     // Won't actually happen, but anyway
@@ -184,6 +178,12 @@ class ConversationChannelClientImpl extends ConversationResourceTracker<Conversa
                     return;
                 }
                 result.setResult(conversation);
+                conversation.addCloseHandler(new CloseHandler<Conversation>() {
+                    @Override
+                    public void handleClose(Conversation closed, IOException exception) {
+                        conversationClosed(conversationID, conversation);
+                    }
+                });
             } catch (IOException e) {
                 sendProtocolError(conversationID, channel, "failed to register conversation");
                 result.setException(e);
@@ -222,11 +222,9 @@ class ConversationChannelClientImpl extends ConversationResourceTracker<Conversa
 
     static class PendingConversation {
 
-        private final ConversationMessageReceiver receiver;
         private final FutureResult<Conversation> result;
 
-        PendingConversation(ConversationMessageReceiver receiver, FutureResult<Conversation> result) {
-            this.receiver = receiver;
+        PendingConversation(FutureResult<Conversation> result) {
             this.result = result;
         }
     }

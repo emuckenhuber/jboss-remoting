@@ -46,7 +46,7 @@ public final class Conversations {
      * @return the conversation client
      */
     public static ConversationChannelClient createClient(final Channel channel, final Executor executor) {
-        final ConversationChannelClientImpl client = new ConversationChannelClientImpl(channel, executor);
+        final NewClientThing client = new NewClientThing(channel, null, executor);
         channel.receiveMessage(client);
         return client;
     }
