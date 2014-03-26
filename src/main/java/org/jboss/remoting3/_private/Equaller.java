@@ -20,7 +20,7 @@
  * 02110-1301 USA, or see the FSF site: http://www.fsf.org.
  */
 
-package org.jboss.remoting3.remote;
+package org.jboss.remoting3._private;
 
 import java.io.Serializable;
 
@@ -30,7 +30,7 @@ import java.io.Serializable;
  * @param <T> the type to compare
  * @author <a href="mailto:david.lloyd@redhat.com">David M. Lloyd</a>
  */
-interface Equaller<T> {
+public interface Equaller<T> {
 
     /**
      * Test the two objects for equality.
